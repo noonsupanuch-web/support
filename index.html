@@ -1,0 +1,919 @@
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Heart, UserPlus, Trash2, CheckCircle2, Circle, Image as ImageIcon, Edit3, Lock, Unlock, Upload, Palette, DollarSign, Download } from 'lucide-react';
+
+const App = () => {
+  // --- ระบบแอดมิน (Admin Mode) ---
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // --- State สำหรับจัดการข้อมูล ---
+  const [currentDate, setCurrentDate] = useState(new Date()); 
+  const [selectedDate, setSelectedDate] = useState(null); 
+  
+  // ข้อมูลที่แสดงบนตาราง
+  const [teacherName, setTeacherName] = useState('นุ่น');
+  const [classTime, setClassTime] = useState('10.30 - 12.00 น.');
+  const [quote, setQuote] = useState('การเรียนแม้เหนื่อยยาก\nยอมลำบากอย่าท้อถอย\nสุดทางที่รอคอย\nคืออนาคตอันงดงาม');
+  
+  // การตกแต่งสีสัน
+  const [headerColor, setHeaderColor] = useState('#ef4444');
+  const [teacherNameColor, setTeacherNameColor] = useState('#fde047');
+  const [cellColors, setCellColors] = useState({}); // เก็บสีพื้นหลังแต่ละวัน {'2023-10-01': '#ffcccc'}
+
+  // การอัปโหลดรูปภาพตกแต่ง
+  const [customImages, setCustomImages] = useState({
+    topLeft: null,
+    topRight: null,
+    bottomRight: null
+  });
+
+  // ช่องทางการติดต่อ
+  const [contactInfo, setContactInfo] = useState({
+    tel: '0646195645',
+    fb: 'Noon Supanuch',
+    line: 'noon_supanuch'
+  });
+
+  // ข้อมูลนักเรียนและการเช็คชื่อ
+  const [students, setStudents] = useState([
+    { id: 1, name: 'ด.ช. สมชาย รักเรียน' },
+    { id: 2, name: 'ด.ญ. สมหญิง ขยันดี' },
+    { id: 3, name: 'ด.ช. มานะ อดทน' }
+  ]);
+  const [newStudentName, setNewStudentName] = useState('');
+  const [classDays, setClassDays] = useState(new Set()); 
+  const [attendance, setAttendance] = useState({});
+
+  // --- ระบบบัญชีค่าเรียน (เฉพาะแอดมิน) ---
+  const [payments, setPayments] = useState({}); // รูปแบบ: { '2023-10': { studentId: { status: 'before', amount: 1500 } } }
+  const [defaultFee, setDefaultFee] = useState(1500);
+
+  // โหลด Script สำหรับบันทึกรูปภาพ
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  // --- ข้อมูลพื้นฐานปฏิทิน ---
+  const monthNames = [
+    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+  ];
+  const dayNames = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"];
+
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth();
+  const currentMonthKey = `${currentYear}-${currentMonth}`;
+
+  const formatDate = (year, month, day) => {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const startingDay = (firstDayOfMonth.getDay() + 6) % 7; 
+
+  const calendarCells = [];
+  for (let i = 0; i < startingDay; i++) calendarCells.push(null);
+  for (let i = 1; i <= daysInMonth; i++) calendarCells.push(i);
+
+  // --- ฟังก์ชันการทำงานต่างๆ ---
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (passwordInput === 'Noon@452656') {
+      setIsAdmin(true);
+      setShowLoginModal(false);
+      setPasswordInput('');
+      setLoginError('');
+    } else {
+      setLoginError('รหัสผ่านไม่ถูกต้องค่ะ ลองใหม่อีกครั้งนะ!');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdmin(false);
+    setSelectedDate(null);
+  };
+
+  const handlePrevMonth = () => setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
+  const handleNextMonth = () => setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
+
+  const handleAddStudent = (e) => {
+    e.preventDefault();
+    if (!isAdmin || newStudentName.trim() === '') return;
+    const newId = students.length > 0 ? Math.max(...students.map(s => s.id)) + 1 : 1;
+    setStudents([...students, { id: newId, name: newStudentName.trim() }]);
+    setNewStudentName('');
+  };
+
+  const handleRemoveStudent = (idToRemove) => {
+    if (!isAdmin) return;
+    setStudents(students.filter(student => student.id !== idToRemove));
+    const newAttendance = { ...attendance };
+    for (const date in newAttendance) {
+      newAttendance[date] = newAttendance[date].filter(id => id !== idToRemove);
+    }
+    setAttendance(newAttendance);
+  };
+
+  const toggleClassDay = (dateStr) => {
+    if (!isAdmin) return;
+    const newClassDays = new Set(classDays);
+    if (newClassDays.has(dateStr)) newClassDays.delete(dateStr);
+    else newClassDays.add(dateStr);
+    setClassDays(newClassDays);
+  };
+
+  const toggleAttendance = (dateStr, studentId) => {
+    if (!isAdmin) return;
+    const currentAttended = attendance[dateStr] || [];
+    let newAttended = currentAttended.includes(studentId) 
+      ? currentAttended.filter(id => id !== studentId)
+      : [...currentAttended, studentId];
+    setAttendance({ ...attendance, [dateStr]: newAttended });
+  };
+
+  const handleCellColorChange = (e, dateStr) => {
+    if (!isAdmin) return;
+    setCellColors({ ...cellColors, [dateStr]: e.target.value });
+  };
+
+  const handlePaymentChange = (studentId, field, value) => {
+    if (!isAdmin) return;
+    setPayments(prev => {
+      const monthData = prev[currentMonthKey] || {};
+      const studentData = monthData[studentId] || { status: 'pending', amount: defaultFee };
+      return {
+        ...prev,
+        [currentMonthKey]: {
+          ...monthData,
+          [studentId]: { ...studentData, [field]: value }
+        }
+      };
+    });
+  };
+
+  const handleExportPaymentCSV = () => {
+    const monthData = payments[currentMonthKey] || {};
+    // ใส่ BOM เข้าไปเพื่อให้ Excel อ่านภาษาไทยได้ถูกต้อง
+    let csvContent = "\uFEFFลำดับ,ชื่อนักเรียน,สถานะการจ่ายเงิน,จำนวนเงิน (บาท)\n";
+
+    let total = 0;
+    students.forEach((student, index) => {
+      const data = monthData[student.id] || { status: 'pending', amount: defaultFee };
+      let statusText = 'ยังไม่จ่าย (รอชำระ)';
+      if (data.status === 'before') statusText = 'จ่ายก่อนเรียน';
+      if (data.status === 'after') statusText = 'จ่ายหลังเรียน';
+
+      const amount = data.status === 'pending' ? 0 : data.amount;
+      total += Number(amount);
+
+      csvContent += `${index + 1},${student.name},${statusText},${amount}\n`;
+    });
+
+    csvContent += `,,,รวมรายรับทั้งหมด,${total}\n`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `บัญชีค่าเรียน_${monthNames[currentMonth]}_${currentYear + 543}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImageUpload = (e, slot) => {
+    const file = e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setCustomImages(prev => ({ ...prev, [slot]: url }));
+    }
+  };
+
+  const removeCustomImage = (slot) => {
+    setCustomImages(prev => ({ ...prev, [slot]: null }));
+  };
+
+  const handleExportImage = async () => {
+    const element = document.getElementById('printable-schedule');
+    if (!element || !window.html2canvas) {
+      alert("ระบบบันทึกรูปภาพกำลังโหลด โปรดรอสักครู่และลองอีกครั้ง");
+      return;
+    }
+    
+    // ซ่อนกล่องเลือกสีชั่วคราวก่อนถ่ายรูป (ถ้ามี)
+    const colorPickers = document.querySelectorAll('.hide-on-print');
+    colorPickers.forEach(el => el.style.display = 'none');
+
+    try {
+      const canvas = await window.html2canvas(element, { 
+        scale: 2, 
+        backgroundColor: '#ffffff',
+        useCORS: true 
+      });
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `ตารางเรียนครู${teacherName}_เดือน${monthNames[currentMonth]}.png`;
+      link.click();
+    } catch (err) {
+      console.error("Export failed", err);
+    } finally {
+      // แสดงกล่องเลือกสีกลับคืนมา
+      colorPickers.forEach(el => el.style.display = 'flex');
+    }
+  };
+
+  // --- คำนวณสถิติประจำเดือน ---
+  const classDaysThisMonth = Array.from(classDays).filter(dateStr => {
+    const d = new Date(dateStr);
+    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+  });
+  const totalClassDaysThisMonth = classDaysThisMonth.length;
+
+  const studentStats = students.map(student => {
+    let attended = 0;
+    classDaysThisMonth.forEach(dateStr => {
+      if (attendance[dateStr] && attendance[dateStr].includes(student.id)) {
+        attended++;
+      }
+    });
+    const missed = totalClassDaysThisMonth - attended;
+    return { ...student, attended, missed };
+  });
+
+  return (
+    <div className="min-h-screen bg-rose-50 p-2 md:p-6 text-gray-800 pb-20 font-sans">
+      {/* เพิ่ม Style สำหรับฟอนต์ลายมือ น่ารักๆ */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @import url('https://fonts.googleapis.com/css2?family=Mali:wght@400;500;600;700&display=swap');
+        .font-mali { font-family: 'Mali', cursive; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
+
+      <div className="font-mali">
+
+        {/* Modal เข้าสู่ระบบแอดมิน */}
+        {showLoginModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm p-4">
+            <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl animate-fade-in text-center border-4 border-rose-200">
+              <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-rose-300">
+                <Lock size={40} className="text-rose-500" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2 text-gray-800">เข้าสู่ระบบคุณครู</h2>
+              <p className="text-gray-500 mb-6 text-sm">กรุณาใส่รหัสผ่านเพื่อแก้ไขตารางเรียน</p>
+              
+              <form onSubmit={handleLogin}>
+                <input 
+                  type="password" 
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="รหัสผ่าน..."
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:outline-none text-center text-lg mb-2"
+                  autoFocus
+                />
+                {loginError && <p className="text-red-500 text-sm mb-4 font-bold">{loginError}</p>}
+                
+                <div className="flex gap-3 mt-6">
+                  <button type="button" onClick={() => {setShowLoginModal(false); setLoginError('');}} className="flex-1 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 transition">
+                    ยกเลิก
+                  </button>
+                  <button type="submit" className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 font-bold text-white shadow-md transition">
+                    เข้าสู่ระบบ
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* แถบควบคุมด้านบน (ไม่ถูกรวมในรูปภาพ) */}
+        <div className="max-w-6xl w-full mx-auto bg-white rounded-2xl shadow-sm border border-rose-100 p-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-4 bg-rose-50 p-2 rounded-2xl border border-rose-100">
+            <button onClick={handlePrevMonth} className="p-2 bg-white hover:bg-rose-200 rounded-xl shadow-sm transition">
+              <ChevronLeft size={24} className="text-rose-600" />
+            </button>
+            <h2 className="text-2xl font-bold w-48 text-center text-rose-800">
+              {monthNames[currentMonth]} {currentYear + 543}
+            </h2>
+            <button onClick={handleNextMonth} className="p-2 bg-white hover:bg-rose-200 rounded-xl shadow-sm transition">
+              <ChevronRight size={24} className="text-rose-600" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 flex-wrap justify-center">
+            {isAdmin ? (
+              <button onClick={handleLogout} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl hover:bg-gray-200 transition font-bold border-2 border-gray-200 shadow-sm">
+                <Unlock size={18} /> ออกจากโหมดแอดมิน
+              </button>
+            ) : (
+              <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-2 bg-rose-100 text-rose-700 px-5 py-2.5 rounded-xl hover:bg-rose-200 transition font-bold border-2 border-rose-200 shadow-sm">
+                <Lock size={18} /> สำหรับแอดมิน
+              </button>
+            )}
+
+            <button 
+              onClick={handleExportImage}
+              className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-500 text-white px-6 py-2.5 rounded-xl hover:from-red-600 hover:to-rose-600 transition shadow-md font-bold text-lg border-2 border-red-600"
+            >
+              <ImageIcon size={20} />
+              บันทึกรูปภาพ
+            </button>
+          </div>
+        </div>
+
+        {/* แผงควบคุมพิเศษสำหรับแอดมิน */}
+        {isAdmin && (
+          <div className="max-w-6xl w-full mx-auto bg-blue-50 rounded-2xl p-4 mb-6 border-2 border-blue-200 shadow-sm flex flex-wrap gap-6 items-center animate-fade-in">
+            <span className="font-bold text-blue-800 flex items-center gap-2">
+              <Palette size={20} /> ตกแต่งตารางเรียน:
+            </span>
+            
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-blue-100 shadow-sm">
+              <label className="text-sm font-bold text-gray-700 cursor-pointer">สีพื้นหัวตาราง:</label>
+              <input type="color" value={headerColor} onChange={(e) => setHeaderColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent" />
+            </div>
+
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-blue-100 shadow-sm">
+              <label className="text-sm font-bold text-gray-700 cursor-pointer">สีชื่อคุณครู:</label>
+              <input type="color" value={teacherNameColor} onChange={(e) => setTeacherNameColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent" />
+            </div>
+
+            <div className="flex flex-wrap gap-2 items-center bg-white px-3 py-1.5 rounded-xl border border-blue-100 shadow-sm">
+              <span className="text-sm font-bold text-gray-700">อัปโหลดรูปตกแต่ง:</span>
+              
+              {/* อัปโหลดรูปซ้ายบน */}
+              <label className="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                ซ้ายบน {customImages.topLeft && '✅'}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'topLeft')} />
+              </label>
+              {customImages.topLeft && <button onClick={() => removeCustomImage('topLeft')} className="text-red-500 hover:text-red-700"><Trash2 size={14}/></button>}
+              
+              {/* อัปโหลดรูปขวาบน */}
+              <label className="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                ขวาบน {customImages.topRight && '✅'}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'topRight')} />
+              </label>
+              {customImages.topRight && <button onClick={() => removeCustomImage('topRight')} className="text-red-500 hover:text-red-700"><Trash2 size={14}/></button>}
+              
+              {/* อัปโหลดรูปล่างขวา */}
+              <label className="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                ล่างขวา {customImages.bottomRight && '✅'}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'bottomRight')} />
+              </label>
+              {customImages.bottomRight && <button onClick={() => removeCustomImage('bottomRight')} className="text-red-500 hover:text-red-700"><Trash2 size={14}/></button>}
+            </div>
+          </div>
+        )}
+
+        {/* ================= พื้นที่สำหรับบันทึกเป็นรูปภาพ ================= */}
+        <div id="printable-schedule" className="max-w-6xl w-full mx-auto bg-white rounded-[32px] overflow-hidden shadow-2xl relative border-[6px] border-gray-100 pb-4">
+          
+          {/* ส่วนหัว (Header) */}
+          <header style={{ backgroundColor: headerColor }} className="text-white p-6 relative flex items-center justify-center shadow-sm border-b-[6px] border-black transition-colors duration-300 min-h-[140px]">
+            
+            {/* ของตกแต่งซ้าย */}
+            <div className="absolute left-2 md:left-8 flex items-center justify-center z-0 opacity-20 md:opacity-100 pointer-events-none">
+              {customImages.topLeft ? (
+                <img src={customImages.topLeft} alt="ตกแต่งซ้าย" className="h-20 md:h-32 object-contain drop-shadow-xl" />
+              ) : (
+                <div className="hidden md:flex items-end opacity-90 drop-shadow-lg">
+                  <div className="relative w-20 h-20">
+                    <div className="absolute top-0 left-0 w-8 h-8 bg-black rounded-full transform -translate-x-3 -translate-y-2 border-2 border-white"></div>
+                    <div className="absolute top-0 right-0 w-8 h-8 bg-black rounded-full transform translate-x-3 -translate-y-2 border-2 border-white"></div>
+                    <div className="absolute bottom-0 w-16 h-16 bg-black rounded-full border-2 border-white mx-2"></div>
+                  </div>
+                  <span className="text-6xl ml-3 drop-shadow-md z-10 transform -rotate-12">🎒</span>
+                </div>
+              )}
+            </div>
+            
+            {/* ของตกแต่งขวา */}
+            <div className="absolute right-2 md:right-8 flex items-center justify-center z-0 opacity-20 md:opacity-100 pointer-events-none">
+              {customImages.topRight ? (
+                <img src={customImages.topRight} alt="ตกแต่งขวา" className="h-20 md:h-32 object-contain drop-shadow-xl" />
+              ) : (
+                <div className="hidden md:flex items-end opacity-90 drop-shadow-lg">
+                  <span className="text-6xl mr-3 drop-shadow-md z-10 transform rotate-12">📝</span>
+                  <div className="relative w-20 h-20 transform scale-x-[-1]">
+                    <div className="absolute top-0 left-0 w-8 h-8 bg-black rounded-full transform -translate-x-3 -translate-y-2 border-2 border-white"></div>
+                    <div className="absolute top-0 right-0 w-8 h-8 bg-black rounded-full transform translate-x-3 -translate-y-2 border-2 border-white"></div>
+                    <div className="absolute bottom-0 w-16 h-16 bg-black rounded-full border-2 border-white mx-2"></div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <h1 className="text-3xl sm:text-4xl md:text-[56px] font-black tracking-wide drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] flex flex-wrap justify-center items-center gap-2 md:gap-3 z-20 relative">
+              ตารางเรียนครู
+              {isAdmin ? (
+                <input 
+                  type="text" 
+                  value={teacherName} 
+                  onChange={(e) => setTeacherName(e.target.value)}
+                  style={{ color: teacherNameColor }}
+                  className="bg-transparent border-b-4 border-dashed border-white/40 focus:border-white focus:outline-none text-center w-32 md:w-56 placeholder-white/70 font-mali"
+                  placeholder="ชื่อครู..."
+                />
+              ) : (
+                <span style={{ color: teacherNameColor }}>{teacherName}</span>
+              )}
+              <span className="ml-2">เดือน{monthNames[currentMonth]}</span>
+            </h1>
+          </header>
+
+          <div className="flex flex-col lg:flex-row p-6 md:p-8 gap-8 bg-white rounded-b-3xl">
+            
+            {/* ฝั่งซ้าย: ปฏิทิน */}
+            <div className="w-full lg:w-2/3">
+              {/* หัวตารางวันในสัปดาห์ */}
+              <div className="grid grid-cols-7 mb-3 bg-gray-100 rounded-2xl border-[3px] border-black overflow-hidden shadow-sm">
+                {dayNames.map((day, index) => (
+                  <div key={day} className={`text-center font-bold text-sm sm:text-base md:text-xl lg:text-2xl py-2 md:py-3 border-r-[3px] border-black last:border-r-0 ${index === 5 ? 'bg-purple-200' : (index === 6 ? 'bg-red-200' : '')} text-gray-900 flex items-center justify-center`}>
+                    <span className="truncate max-w-full px-1">{day}</span>
+                  </div>
+                ))}
+              </div>
+              
+              {/* ตารางปฏิทิน */}
+              <div className="grid grid-cols-7 border-t-[3px] border-l-[3px] border-black bg-black gap-[3px] shadow-lg rounded-2xl overflow-hidden">
+                {calendarCells.map((day, index) => {
+                  const dayOfWeek = index % 7;
+                  let dateStr = null;
+                  if (day) dateStr = formatDate(currentYear, currentMonth, day);
+
+                  // กำหนดสีพื้นหลัง
+                  let bgClass = "bg-white"; 
+                  if (dayOfWeek === 5) bgClass = "bg-[#e9d5ff]"; // วันเสาร์ สีม่วงอ่อน
+                  if (dayOfWeek === 6) bgClass = "bg-[#fecaca]"; // วันอาทิตย์ สีแดงอ่อน
+                  
+                  // ถ้ามีการกำหนดสีพิเศษโดยแอดมิน
+                  let cellStyle = {};
+                  if (dateStr && cellColors[dateStr]) {
+                    cellStyle.backgroundColor = cellColors[dateStr];
+                  }
+
+                  const isSelected = selectedDate === dateStr;
+                  const isClassDay = dateStr && classDays.has(dateStr);
+
+                  return (
+                    <div 
+                      key={index} 
+                      onClick={() => {
+                        if (day) setSelectedDate(dateStr);
+                      }}
+                      style={cellStyle}
+                      className={`
+                        ${!cellStyle.backgroundColor ? bgClass : ''} 
+                        h-24 md:h-[130px] relative cursor-pointer 
+                        border-b-[3px] border-r-[3px] border-black transition-all
+                        ${isSelected ? (isAdmin ? 'ring-4 ring-inset ring-blue-400 z-10 bg-blue-50/50' : 'bg-blue-50/50') : ''}
+                        ${!day ? 'bg-gray-50' : 'hover:bg-gray-50/50'}
+                      `}
+                    >
+                      {day && (
+                        <>
+                          <span className={`absolute top-2 left-2 text-2xl md:text-3xl font-black ${dayOfWeek === 6 ? 'text-red-700' : (dayOfWeek === 5 ? 'text-purple-800' : 'text-gray-800')}`}>
+                            {day}
+                          </span>
+                          
+                          {/* ไอคอนหัวใจ */}
+                          {isClassDay && (
+                            <div className="absolute top-2 right-2 md:top-3 md:right-3 w-9 h-9 md:w-12 md:h-12 bg-white rounded-full border-[3px] border-black flex items-center justify-center shadow-sm z-20">
+                              <Heart fill="#ef4444" color="#ef4444" size={24} className="mt-[2px]" />
+                              <div className="absolute -bottom-[5px] -left-[2px] w-3 h-3 bg-white border-l-[3px] border-b-[3px] border-black transform rotate-[-30deg]"></div>
+                            </div>
+                          )}
+                          
+                          {/* จำนวนที่มาเรียน */}
+                          {dateStr && attendance[dateStr] && attendance[dateStr].length > 0 && (
+                            <div className="absolute bottom-2 right-2 text-xs md:text-sm font-bold bg-green-100 border-2 border-green-500 text-green-700 px-2 py-0.5 rounded-xl shadow-sm z-20">
+                              มา {attendance[dateStr].length}/{students.length}
+                            </div>
+                          )}
+
+                          {/* ปุ่มเลือกสีพื้นหลัง (โชว์เฉพาะแอดมินตอนเลือกวันที่) */}
+                          {isAdmin && isSelected && (
+                            <div className="absolute bottom-2 left-2 hide-on-print bg-white p-1 rounded-lg border-2 border-gray-300 shadow-lg z-30 flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                               <Palette size={14} className="text-gray-500 mr-1" />
+                               <input 
+                                 type="color" 
+                                 value={cellColors[dateStr] || '#ffffff'} 
+                                 onChange={(e) => handleCellColorChange(e, dateStr)}
+                                 className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+                               />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ฝั่งขวา: ข้อมูลเวลาและคำคม */}
+            <div className="w-full lg:w-1/3 flex flex-col items-center p-2 relative">
+              
+              <div className="flex flex-col items-center mb-6 w-full">
+                <h3 className="text-[26px] md:text-[32px] font-black text-gray-900 flex items-center gap-2 text-center">
+                  วันที่มีรูปหัวใจ
+                  <div className="w-12 h-12 bg-white rounded-full border-[3px] border-black flex items-center justify-center shadow-sm relative ml-1 transform rotate-12">
+                    <Heart fill="#ef4444" color="#ef4444" size={28} className="mt-[2px]" />
+                    <div className="absolute -bottom-[5px] -left-[2px] w-4 h-4 bg-white border-l-[3px] border-b-[3px] border-black transform rotate-[-30deg]"></div>
+                  </div>
+                </h3>
+                <h3 className="text-[26px] md:text-[32px] font-black text-gray-900 mt-1">
+                  เป็นวันที่มีเรียนนะคะ
+                </h3>
+              </div>
+
+              {/* กล่องเวลาเรียน */}
+              <div className="w-full mb-8 relative group">
+                {isAdmin ? (
+                  <>
+                    <Edit3 size={18} className="absolute -top-3 -right-3 text-gray-400 opacity-0 group-hover:opacity-100 transition bg-white p-1 rounded-full shadow-sm" />
+                    <input 
+                      type="text" 
+                      value={classTime}
+                      onChange={(e) => setClassTime(e.target.value)}
+                      className="w-full text-center text-3xl md:text-[40px] font-black text-rose-600 bg-transparent border-2 border-dashed border-transparent hover:border-gray-300 rounded-2xl py-3 focus:outline-none focus:border-rose-400 focus:bg-rose-50 transition-all font-mali"
+                    />
+                  </>
+                ) : (
+                  <div className="w-full text-center text-3xl md:text-[40px] font-black text-rose-600 py-3">
+                    {classTime}
+                  </div>
+                )}
+              </div>
+
+              {/* กล่องคำคม */}
+              <div className="w-full relative group mb-8 flex-grow flex justify-center">
+                 {isAdmin ? (
+                   <>
+                     <Edit3 size={18} className="absolute -top-3 right-0 text-gray-400 opacity-0 group-hover:opacity-100 transition bg-white p-1 rounded-full shadow-sm z-10" />
+                     <textarea 
+                        value={quote}
+                        onChange={(e) => setQuote(e.target.value)}
+                        rows={4}
+                        className="w-full max-w-[280px] text-center text-xl md:text-2xl font-bold text-gray-700 leading-relaxed bg-transparent border-2 border-dashed border-transparent hover:border-gray-300 rounded-2xl p-4 focus:outline-none focus:border-blue-400 focus:bg-blue-50 transition-all resize-none overflow-hidden font-mali"
+                     />
+                   </>
+                 ) : (
+                   <div className="w-full max-w-[280px] text-center text-xl md:text-2xl font-bold text-gray-700 leading-relaxed p-4 whitespace-pre-wrap">
+                     {quote}
+                   </div>
+                 )}
+              </div>
+
+              {/* การ์ตูนตกแต่งด้านล่างขวา */}
+              <div className="w-full flex justify-center items-end mt-auto gap-3 pb-4 z-10">
+                 {customImages.bottomRight ? (
+                    <img src={customImages.bottomRight} alt="ตกแต่งล่างขวา" className="h-40 md:h-52 object-contain drop-shadow-2xl" />
+                 ) : (
+                   <>
+                     <span className="text-[50px] drop-shadow-xl mb-12 animate-pulse">✨</span>
+                     <div className="relative flex flex-col items-center drop-shadow-2xl z-10 transform hover:scale-105 transition-transform duration-300">
+                         <div className="relative w-28 h-28 mb-[-30px] z-0">
+                             <div className="absolute top-0 left-0 w-12 h-12 bg-gray-900 rounded-full transform -translate-x-3 -translate-y-2 border-[3px] border-white shadow-sm"></div>
+                             <div className="absolute top-0 right-0 w-12 h-12 bg-gray-900 rounded-full transform translate-x-3 -translate-y-2 border-[3px] border-white shadow-sm"></div>
+                             <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-24 h-24 bg-gray-900 rounded-full border-[3px] border-white shadow-sm flex items-center justify-center">
+                                <div className="w-20 h-16 bg-[#fde047] rounded-[45%] absolute bottom-1 flex flex-col items-center justify-end pb-1 border-[3px] border-gray-900">
+                                   <div className="w-4 h-3 bg-black rounded-[50%] mb-1"></div>
+                                   <div className="w-8 h-1.5 border-b-[3px] border-black rounded-[50%]"></div>
+                                </div>
+                             </div>
+                         </div>
+                         <div className="text-[85px] z-10 drop-shadow-2xl">📖</div>
+                     </div>
+                     <span className="text-[40px] drop-shadow-xl mb-6 ml-2 transform rotate-12">✏️</span>
+                   </>
+                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* แถบช่องทางการติดต่อ (แสดงในรูปภาพด้วย) */}
+          <div className="px-6 md:px-8 mt-4">
+            <div className="bg-rose-50 border-[3px] border-rose-200 rounded-2xl p-4 flex flex-col md:flex-row justify-center items-center gap-4 md:gap-10 shadow-sm relative group">
+               {isAdmin && (
+                  <div className="absolute -top-3 -right-3 hide-on-print bg-white p-2 rounded-full border-2 border-gray-200 shadow-md cursor-pointer hover:bg-gray-50" title="แก้ไขข้อมูลติดต่อ">
+                    <Edit3 size={16} className="text-gray-500" />
+                  </div>
+               )}
+               
+               <div className="flex items-center gap-2 font-bold text-gray-700 text-lg md:text-xl">
+                 <span className="text-2xl drop-shadow-sm">📞</span> โทร: 
+                 {isAdmin ? <input type="text" value={contactInfo.tel} onChange={e => setContactInfo({...contactInfo, tel: e.target.value})} className="bg-transparent border-b-2 border-dashed border-gray-300 focus:border-rose-400 focus:outline-none w-32 font-mali text-rose-600"/> : <span className="text-rose-600">{contactInfo.tel}</span>}
+               </div>
+               <div className="flex items-center gap-2 font-bold text-gray-700 text-lg md:text-xl">
+                 <span className="text-2xl drop-shadow-sm">📘</span> FB: 
+                 {isAdmin ? <input type="text" value={contactInfo.fb} onChange={e => setContactInfo({...contactInfo, fb: e.target.value})} className="bg-transparent border-b-2 border-dashed border-gray-300 focus:border-rose-400 focus:outline-none w-40 font-mali text-blue-600"/> : <span className="text-blue-600">{contactInfo.fb}</span>}
+               </div>
+               <div className="flex items-center gap-2 font-bold text-gray-700 text-lg md:text-xl">
+                 <span className="text-2xl drop-shadow-sm">📱</span> ID: 
+                 {isAdmin ? <input type="text" value={contactInfo.line} onChange={e => setContactInfo({...contactInfo, line: e.target.value})} className="bg-transparent border-b-2 border-dashed border-gray-300 focus:border-rose-400 focus:outline-none w-36 font-mali text-green-600"/> : <span className="text-green-600">{contactInfo.line}</span>}
+               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= พื้นที่จัดการนักเรียน (ไม่ถูกรวมในรูปภาพ) ================= */}
+        {isAdmin ? (
+          <>
+          <div className="max-w-6xl w-full mx-auto mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
+            {/* จัดการรายชื่อนักเรียน */}
+            <div className="bg-white p-6 md:p-8 rounded-[32px] shadow-lg border-[3px] border-gray-100">
+              <h3 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-3 text-gray-800 border-b-2 border-dashed border-gray-200 pb-4">
+                <div className="bg-blue-100 p-3 rounded-2xl border-2 border-blue-200"><UserPlus className="text-blue-600" size={32} /></div>
+                รายชื่อนักเรียน
+              </h3>
+              
+              <form onSubmit={handleAddStudent} className="flex flex-col sm:flex-row gap-3 mb-6">
+                <input 
+                  type="text"
+                  value={newStudentName}
+                  onChange={(e) => setNewStudentName(e.target.value)}
+                  placeholder="พิมพ์ชื่อนักเรียน แล้วกดเพิ่ม..."
+                  className="flex-grow px-5 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:bg-white transition-colors text-xl font-mali"
+                />
+                <button type="submit" className="bg-blue-600 text-white px-8 py-3.5 rounded-2xl hover:bg-blue-700 transition font-bold shadow-md whitespace-nowrap text-xl border-[3px] border-blue-800">
+                  เพิ่มชื่อ
+                </button>
+              </form>
+
+              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                {students.map((student, index) => (
+                  <div key={student.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border-2 border-gray-200 hover:border-blue-300 transition-colors group">
+                    <span className="font-bold text-gray-700 text-xl">{index + 1}. {student.name}</span>
+                    <button 
+                      onClick={() => handleRemoveStudent(student.id)}
+                      className="bg-white text-red-500 p-2.5 rounded-xl border-2 border-gray-200 hover:border-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                      title="ลบนักเรียน"
+                    >
+                      <Trash2 size={22} />
+                    </button>
+                  </div>
+                ))}
+                {students.length === 0 && (
+                  <div className="text-center text-gray-400 py-10 font-medium text-lg">ยังไม่มีรายชื่อนักเรียน เพิ่มชื่อด้านบนได้เลยครับ</div>
+                )}
+              </div>
+            </div>
+
+            {/* เช็คชื่อประจำวัน */}
+            <div className={`p-6 md:p-8 rounded-[32px] shadow-lg border-[3px] transition-all duration-300 ${selectedDate ? 'bg-white border-green-200' : 'bg-gray-50 border-gray-100'}`}>
+              <h3 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-3 text-gray-800 border-b-2 border-dashed border-gray-200 pb-4">
+                <div className={`p-3 rounded-2xl border-2 ${selectedDate ? 'bg-green-100 border-green-200' : 'bg-gray-200 border-gray-300'}`}>
+                  <CheckCircle2 className={selectedDate ? "text-green-600" : "text-gray-500"} size={32} />
+                </div>
+                ระบบเช็คชื่อรายวัน
+              </h3>
+
+              {!selectedDate ? (
+                <div className="text-center text-gray-400 py-20 flex flex-col items-center bg-gray-100/50 rounded-3xl border-[3px] border-dashed border-gray-300">
+                  <span className="text-6xl mb-4 grayscale opacity-50 animate-bounce">👆</span>
+                  <p className="text-2xl font-bold mb-2 text-gray-500">ยังไม่ได้เลือกวันที่</p>
+                  <p className="text-lg">คลิกเลือกวันที่บนตารางด้านบน<br/>เพื่อจัดตารางและเช็คชื่อ</p>
+                </div>
+              ) : (
+                <div className="animate-fade-in">
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 bg-blue-50 p-5 rounded-3xl border-[3px] border-blue-100">
+                    <span className="font-black text-blue-900 text-2xl text-center sm:text-left">
+                      {new Date(selectedDate).toLocaleDateString('th-TH', { 
+                        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+                      })}
+                    </span>
+                    <button 
+                      onClick={() => toggleClassDay(selectedDate)}
+                      className={`flex items-center justify-center w-full sm:w-auto gap-2 px-6 py-3.5 rounded-2xl font-bold transition-all shadow-sm text-lg ${
+                        classDays.has(selectedDate) 
+                          ? 'bg-red-500 text-white hover:bg-red-600 border-[3px] border-black' 
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border-[3px] border-gray-300'
+                      }`}
+                    >
+                      <Heart size={24} fill={classDays.has(selectedDate) ? "white" : "none"} className={classDays.has(selectedDate) ? "" : "text-gray-400"} />
+                      {classDays.has(selectedDate) ? 'ยกเลิกคลาสเรียน' : 'ตั้งเป็นวันที่มีเรียน'}
+                    </button>
+                  </div>
+
+                  {classDays.has(selectedDate) ? (
+                    <div className="space-y-3 bg-green-50/50 p-5 rounded-3xl border-[3px] border-green-100">
+                      <p className="font-bold text-green-800 mb-4 flex items-center gap-2 text-lg">
+                        <span className="bg-green-200 px-3 py-1 rounded-xl text-sm border border-green-300">ติ๊กเพื่อเช็คชื่อ</span>
+                        รายชื่อนักเรียน
+                      </p>
+                      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                        {students.map(student => {
+                          const isAttended = (attendance[selectedDate] || []).includes(student.id);
+                          return (
+                            <div 
+                              key={student.id} 
+                              onClick={() => toggleAttendance(selectedDate, student.id)}
+                              className={`flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all border-[3px] ${
+                                isAttended 
+                                  ? 'bg-white border-green-500 shadow-[4px_4px_0_#22c55e]' 
+                                  : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm text-gray-500'
+                              }`}
+                            >
+                              {isAttended ? (
+                                <CheckCircle2 className="text-green-500 flex-shrink-0" size={32} />
+                              ) : (
+                                <Circle className="text-gray-300 flex-shrink-0" size={32} />
+                              )}
+                              <span className={`font-bold text-xl ${isAttended ? 'text-green-700' : ''}`}>{student.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 text-gray-500 bg-white rounded-3xl border-[3px] border-dashed border-gray-300">
+                      <span className="text-6xl mb-4 block opacity-50">📴</span>
+                      <p className="font-bold text-2xl">ไม่มีการเรียนการสอน</p>
+                      <p className="text-lg mt-2 text-gray-400">กดปุ่ม "ตั้งเป็นวันที่มีเรียน" เพื่อเปิดระบบเช็คชื่อ</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ================= ระบบการจ่ายเงิน (เฉพาะครู) ================= */}
+          <div className="max-w-6xl w-full mx-auto mt-8 bg-amber-50 p-6 md:p-8 rounded-[32px] shadow-lg border-[3px] border-amber-200 animate-fade-in">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6 border-b-2 border-dashed border-amber-200 pb-4 gap-4">
+              <h3 className="text-2xl md:text-3xl font-bold flex items-center gap-3 text-amber-900">
+                <div className="bg-amber-200 p-3 rounded-2xl border-2 border-amber-300"><DollarSign className="text-amber-700" size={32} /></div>
+                ระบบบัญชีค่าเรียน (เห็นเฉพาะแอดมิน)
+              </h3>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="bg-white px-4 py-2 rounded-xl border-2 border-amber-200 flex items-center justify-between gap-2 shadow-sm">
+                  <span className="font-bold text-amber-800 text-sm md:text-base">ค่าเรียน/คน:</span>
+                  <input type="number" value={defaultFee} onChange={(e) => setDefaultFee(Number(e.target.value))} className="w-20 text-center font-bold text-amber-900 focus:outline-none border-b-2 border-amber-300 bg-transparent text-lg" />
+                  <span className="font-bold text-amber-800 text-sm md:text-base">บาท</span>
+                </div>
+                <button onClick={handleExportPaymentCSV} className="bg-emerald-500 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 font-bold flex items-center justify-center gap-2 shadow-sm border-[3px] border-emerald-700 transition">
+                  <Download size={20} /> ส่งออก (CSV)
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto custom-scrollbar bg-white rounded-2xl border-2 border-amber-200">
+              <table className="w-full min-w-[600px] border-collapse">
+                <thead>
+                  <tr className="bg-amber-200/50">
+                    <th className="py-4 px-4 border-b-2 border-amber-200 text-amber-900 w-16 text-center">ลำดับ</th>
+                    <th className="py-4 px-4 border-b-2 border-amber-200 text-amber-900 text-left">ชื่อนักเรียน</th>
+                    <th className="py-4 px-4 border-b-2 border-amber-200 text-amber-900 text-center">สถานะการจ่ายเงิน</th>
+                    <th className="py-4 px-4 border-b-2 border-amber-200 text-amber-900 w-40 text-center">จำนวนเงิน (บาท)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((student, index) => {
+                    const currentMonthData = payments[currentMonthKey] || {};
+                    const data = currentMonthData[student.id] || { status: 'pending', amount: defaultFee };
+                    return (
+                      <tr key={student.id} className="hover:bg-amber-50/50 transition border-b border-amber-100 last:border-b-0">
+                        <td className="py-3 px-4 text-center font-bold text-gray-600">{index + 1}</td>
+                        <td className="py-3 px-4 font-bold text-gray-800 text-lg">{student.name}</td>
+                        <td className="py-3 px-4 text-center">
+                          <select 
+                            value={data.status} 
+                            onChange={(e) => handlePaymentChange(student.id, 'status', e.target.value)}
+                            className={`p-2.5 rounded-xl font-bold border-2 focus:outline-none cursor-pointer w-full max-w-[220px] transition-colors ${
+                              data.status === 'before' ? 'bg-green-100 border-green-300 text-green-700' : 
+                              data.status === 'after' ? 'bg-blue-100 border-blue-300 text-blue-700' : 
+                              'bg-gray-50 border-gray-200 text-gray-500 hover:border-amber-300'
+                            }`}
+                          >
+                            <option value="pending">⏳ รอชำระ (ยังไม่จ่าย)</option>
+                            <option value="before">✅ จ่ายก่อนเรียน</option>
+                            <option value="after">☑️ จ่ายหลังเรียน</option>
+                          </select>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <input 
+                            type="number" 
+                            value={data.amount} 
+                            onChange={(e) => handlePaymentChange(student.id, 'amount', e.target.value)}
+                            disabled={data.status === 'pending'}
+                            className={`w-full text-center font-bold p-2.5 rounded-xl border-2 focus:outline-none transition-colors text-lg ${
+                              data.status === 'pending' ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border-amber-200 text-amber-700 focus:border-amber-500 shadow-inner'
+                            }`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {students.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="text-center py-8 text-amber-600 font-bold text-lg">ยังไม่มีรายชื่อนักเรียนในระบบ</td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-amber-100 border-t-2 border-amber-300">
+                    <td colSpan="3" className="py-5 px-6 text-right font-black text-amber-900 text-xl md:text-2xl">รวมรายรับเดือนนี้</td>
+                    <td className="py-5 px-4 text-center font-black text-emerald-600 text-2xl md:text-3xl bg-green-50 border-l-2 border-amber-300">
+                      ฿ {students.reduce((sum, s) => {
+                          const md = (payments[currentMonthKey] || {})[s.id];
+                          return sum + (md && md.status !== 'pending' ? Number(md.amount) : 0);
+                        }, 0).toLocaleString()}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          </>
+        ) : null}
+
+        {/* ================= พื้นที่สรุปสถิติ (แสดงผลทุกคน) ================= */}
+        <div className="max-w-6xl w-full mx-auto mt-8 bg-gradient-to-br from-pink-100 to-rose-100 p-6 md:p-10 rounded-[40px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border-[6px] border-white relative overflow-hidden mb-10">
+          <div className="absolute top-[-20px] right-[-20px] text-[120px] opacity-20 transform rotate-12 pointer-events-none">📊</div>
+          <div className="absolute bottom-[-20px] left-[-20px] text-[120px] opacity-20 transform -rotate-12 pointer-events-none">🌟</div>
+          
+          <h3 className="text-3xl md:text-4xl font-black mb-8 text-rose-800 flex flex-col md:flex-row items-center gap-4 drop-shadow-sm z-10 relative text-center md:text-left border-b-[3px] border-white/50 pb-6">
+            <div className="bg-white p-4 rounded-3xl shadow-sm border-[3px] border-rose-200 transform -rotate-6"><Heart className="text-rose-500" size={40} fill="#f43f5e" /></div>
+            สรุปสถิติการมาเรียนเดือน{monthNames[currentMonth]}
+            <span className="text-xl bg-rose-500 text-white px-6 py-2.5 rounded-full md:ml-auto shadow-md border-[3px] border-white mt-4 md:mt-0">
+              รอบ: {classTime}
+            </span>
+          </h3>
+
+          {totalClassDaysThisMonth === 0 ? (
+             <div className="text-center bg-white/80 backdrop-blur-sm p-12 rounded-[32px] border-[3px] border-dashed border-rose-300 z-10 relative shadow-sm">
+               <span className="text-7xl animate-bounce inline-block mb-4">😴</span>
+               <p className="text-rose-700 font-bold text-3xl">เดือนนี้ยังไม่มีการจัดตารางเรียนค่ะ</p>
+               <p className="text-rose-500 mt-3 text-xl">รอคุณครูอัปเดตตารางเรียนสักครู่นะคะ!</p>
+             </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 z-10 relative">
+              {studentStats.map(stat => (
+                <div key={stat.id} className="bg-white/95 backdrop-blur-sm p-6 md:p-8 rounded-[32px] shadow-sm border-[4px] border-rose-200 hover:shadow-xl hover:border-rose-400 hover:-translate-y-2 transition-all duration-300 flex flex-col justify-between group">
+                  <div className="flex justify-between items-start mb-6">
+                    <span className="font-bold text-gray-800 text-2xl line-clamp-2 pr-2">{stat.name}</span>
+                    <span className="text-4xl group-hover:scale-125 transition-transform duration-300 origin-center drop-shadow-sm flex-shrink-0" title={stat.missed === 0 ? "มาครบ!" : "มีขาดเรียน"}>
+                      {stat.missed === 0 ? '🏆' : (stat.missed <= 1 ? '👍' : '💪')}
+                    </span>
+                  </div>
+                  
+                  <div className="bg-rose-50/80 rounded-2xl p-5 mb-6 border-2 border-rose-100">
+                    <div className="flex justify-between items-end mb-3">
+                      <span className="font-bold text-gray-500 text-lg">เข้าเรียน</span>
+                      <div className="text-right">
+                        <span className="text-4xl font-black text-rose-600 drop-shadow-sm">{stat.attended}</span>
+                        <span className="text-gray-400 font-bold text-lg"> / {totalClassDaysThisMonth} วัน</span>
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner border border-gray-300">
+                      <div 
+                        className="bg-gradient-to-r from-green-400 to-emerald-500 h-full rounded-full transition-all duration-1000 ease-out relative border-r-2 border-white/50" 
+                        style={{ width: `${(stat.attended / totalClassDaysThisMonth) * 100}%` }}
+                      >
+                        <div className="absolute top-0 right-0 bottom-0 left-0 bg-white/20 animate-pulse"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-center mt-auto">
+                    {stat.missed === 0 ? (
+                      <div className="w-full bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 font-black py-3 px-4 rounded-2xl border-[3px] border-green-200 text-lg shadow-sm flex items-center justify-center gap-2">
+                        <span className="animate-bounce">✨</span> มาครบ 100% เก่งมาก!
+                      </div>
+                    ) : (
+                      <div className="w-full bg-gradient-to-r from-orange-50 to-red-50 text-red-600 font-bold py-3 px-4 rounded-2xl border-[3px] border-red-100 text-lg shadow-sm flex items-center justify-center gap-2">
+                        😢 ขาดเรียนไป {stat.missed} วัน
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {studentStats.length === 0 && (
+                 <div className="col-span-full text-center bg-white/80 p-12 rounded-[32px] border-[3px] border-dashed border-rose-300">
+                   <span className="text-7xl mb-4 inline-block opacity-70">🤷‍♀️</span>
+                   <p className="text-rose-700 font-bold text-3xl">ยังไม่มีรายชื่อนักเรียนค่ะ</p>
+                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default App;
